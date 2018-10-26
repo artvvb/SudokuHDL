@@ -12,29 +12,38 @@ module sudoku ();
     
 	localparam SIZE=4, SIZE_SQRT=2;
 	reg [SIZE-1:0] _cells [SIZE-1:0][SIZE-1:0];
+	reg [SIZE-1:0] _cells_golden [SIZE-1:0][SIZE-1:0];
 	reg [SIZE-1:0] done [SIZE-1:0][SIZE-1:0];
 	initial begin
 	    // puzzle:           (32'h) 1FF8 F81F F48F 8FF4
 	    // expected results: (32'h) 1248 4812 2481 8124
 	    // tested results:   (32'h) 1248 4812 2481 8124
-		_cells[0][0] = 4'b0001;
-		_cells[0][1] = 4'b1111;
-		_cells[0][2] = 4'b1111;
-		_cells[0][3] = 4'b1000;
-		_cells[1][0] = 4'b1111;
-		_cells[1][1] = 4'b1000;
-		_cells[1][2] = 4'b0001;
-		_cells[1][3] = 4'b1111;
-		_cells[2][0] = 4'b1111;
-		_cells[2][1] = 4'b0100;
-		_cells[2][2] = 4'b1000;
-		_cells[2][3] = 4'b1111;
-		_cells[3][0] = 4'b1000;
-		_cells[3][1] = 4'b1111;
-		_cells[3][2] = 4'b1111;
-		_cells[3][3] = 4'b0100;
+		_cells[0][0] = 4'b0001; _cells_golden[0][0] = 4'b0001;
+		_cells[0][1] = 4'b1111; _cells_golden[0][1] = 4'b0010;
+		_cells[0][2] = 4'b1111; _cells_golden[0][2] = 4'b0100;
+		_cells[0][3] = 4'b1000; _cells_golden[0][3] = 4'b1000;
+		_cells[1][0] = 4'b1111; _cells_golden[1][0] = 4'b0100;
+		_cells[1][1] = 4'b1000; _cells_golden[1][1] = 4'b1000;
+		_cells[1][2] = 4'b0001; _cells_golden[1][2] = 4'b0001;
+		_cells[1][3] = 4'b1111; _cells_golden[1][3] = 4'b0010;
+		_cells[2][0] = 4'b1111; _cells_golden[2][0] = 4'b0010;
+		_cells[2][1] = 4'b0100; _cells_golden[2][1] = 4'b0100;
+		_cells[2][2] = 4'b1000; _cells_golden[2][2] = 4'b1000;
+		_cells[2][3] = 4'b1111; _cells_golden[2][3] = 4'b0001;
+		_cells[3][0] = 4'b1000; _cells_golden[3][0] = 4'b1000;
+		_cells[3][1] = 4'b1111; _cells_golden[3][1] = 4'b0001;
+		_cells[3][2] = 4'b1111; _cells_golden[3][2] = 4'b0010;
+		_cells[3][3] = 4'b0100; _cells_golden[3][3] = 4'b0100;
 	end
-	
+	reg valid;
+	always@(*) begin : check_valid
+	    integer y, x;
+	    valid = 1;
+	    for (y=0; y<SIZE; y=y+1)
+	       for (x=0; x<SIZE; x=x+1)
+	           if (_cells[y][x] != _cells_golden[y][x])
+	               valid = 0;
+	end
 	// 1 . . 4 = 1 2 3 4
 	// . 4 1 . = 3 4 1 2
 	// . 3 4 . = 2 3 4 1
@@ -44,51 +53,51 @@ module sudoku ();
 	generate
 		for (g_done_y=0; g_done_y<SIZE; g_done_y=g_done_y+1) begin : generate_done_y
 			for (g_done_x=0; g_done_x<SIZE; g_done_x=g_done_x+1) begin : generate_done_x
-				always@(_cells[g_done_y][g_done_x]) begin
-					case (_cells[g_done_y][g_done_x])
-						4'b0001: done[g_done_y][g_done_x] = 4'b0001;
-						4'b0010: done[g_done_y][g_done_x] = 4'b0010;
-						4'b0100: done[g_done_y][g_done_x] = 4'b0100;
-						4'b1000: done[g_done_y][g_done_x] = 4'b1000;
-						default: done[g_done_y][g_done_x] = 4'b0000;
-					endcase
+				always@(_cells[g_done_y][g_done_x]) begin : generate_done_y_x
+				    integer i;
+				    done[g_done_y][g_done_x] = 0;
+				    for (i=0; i<SIZE; i=i+1)
+				        if (_cells[g_done_y][g_done_x] == 1 << i)
+				            done[g_done_y][g_done_x] = _cells[g_done_y][g_done_x];
 				end
 			end
 		end
 	endgenerate
-	wire [3:0] region_row [3:0];
-	wire [3:0] region_box [3:0];
-	wire [3:0] region_col [3:0];
-	genvar g_row;
+	reg [SIZE-1:0] region_row [SIZE-1:0];
+	reg [SIZE-1:0] region_box [SIZE-1:0];
+	reg [SIZE-1:0] region_col [SIZE-1:0];
+	genvar region_i;
 	generate
-		for (g_row=0; g_row<SIZE; g_row=g_row+1) begin : generate_row
-			assign region_row[g_row] = done[g_row][0] | done[g_row][1] | done[g_row][2] | done[g_row][3];
+		for (region_i=0; region_i<SIZE; region_i=region_i+1) begin : generate_row
+		    always@(*) begin : generate_region_row
+		        integer i;
+		        integer temp_row, temp_col, temp_box;
+		        temp_row = 0;
+		        temp_col = 0;
+		        temp_box = 0;
+		        for (i=0; i<SIZE; i=i+1) begin
+                    temp_row = temp_row | done[region_i][i];
+                    temp_col = temp_col | done[i][region_i];
+                    temp_box = temp_box | done[(region_i / SIZE_SQRT) * SIZE_SQRT + (i / SIZE_SQRT)][(region_i % SIZE_SQRT) * SIZE_SQRT + (i % SIZE_SQRT)];
+		        end
+                region_row[region_i] = temp_row;
+                region_col[region_i] = temp_col;
+                region_box[region_i] = temp_box;
+		    end
 		end
 	endgenerate
-	genvar g_box;
-	generate
-		for (g_box=0; g_box<SIZE; g_box=g_box+1) begin : generate_box
-			assign region_box[g_box] = 
-			    done[{g_box[1], 1'b0}][{g_box[0], 1'b0}] |
-			    done[{g_box[1], 1'b0}][{g_box[0], 1'b1}] |
-			    done[{g_box[1], 1'b1}][{g_box[0], 1'b0}] |
-			    done[{g_box[1], 1'b1}][{g_box[0], 1'b1}];
-		end
-	endgenerate
-	genvar g_col;
-	generate
-		for (g_col=0; g_col<SIZE; g_col=g_col+1) begin : generate_col
-			assign region_col[g_col] = done[0][g_col] | done[1][g_col] | done[2][g_col] | done[3][g_col];
-		end
-	endgenerate
+	
 	genvar cell_x, cell_y;
 	generate
 		for (cell_y=0; cell_y<SIZE; cell_y=cell_y+1) begin : generate_cell_y
 			for (cell_x=0; cell_x<SIZE; cell_x=cell_x+1) begin : generate_cell_x
 				always@(posedge clk) begin
-				    if (done[cell_y][cell_x] == 4'b0000)
-                        _cells[cell_y][cell_x] <= _cells[cell_y][cell_x] & ~region_row[cell_y] & ~region_box[{cell_y[1], cell_x[1]}] & ~region_col[cell_x];
-
+				    if (done[cell_y][cell_x] == 0) begin
+                        _cells[cell_y][cell_x] <= _cells[cell_y][cell_x] &
+                            ~region_row[cell_y] &
+                            ~region_box[ (cell_y / SIZE_SQRT) * SIZE_SQRT + (cell_x / SIZE_SQRT) ] &
+                            ~region_col[cell_x];
+                    end
 				end
 			end
 		end
